@@ -5,7 +5,7 @@
 #include <cstdint>
 
 #define CONFIG_FILENAME "/config.json"
-#define CONFIG_VERSION 0x00011900 // 0.1.24 // make sure to clean all after change
+#define CONFIG_VERSION 0x00011c00 // 0.1.28 // make sure to clean all after change
 
 #define WIFI_MAX_SSID_STRLEN 32
 #define WIFI_MAX_PASSWORD_STRLEN 64
@@ -30,8 +30,6 @@
 
 #define DEV_MAX_MAPPING_NAME_STRLEN 63
 
-#define JSON_BUFFER_SIZE 12288
-
 struct CHANNEL_CONFIG_T {
     uint16_t MaxChannelPower;
     char Name[CHAN_MAX_NAME_STRLEN];
@@ -49,6 +47,7 @@ struct INVERTER_CONFIG_T {
     uint8_t ReachableThreshold;
     bool ZeroRuntimeDataIfUnrechable;
     bool ZeroYieldDayOnMidnight;
+    bool ClearEventlogOnMidnight;
     bool YieldDayCorrection;
     CHANNEL_CONFIG_T channel[INV_MAX_CHAN_COUNT];
 };
@@ -129,6 +128,7 @@ struct CONFIG_T {
         struct {
             int8_t PaLevel;
             uint32_t Frequency;
+            uint8_t CountryMode;
         } Cmt;
     } Dtu;
 
@@ -143,7 +143,10 @@ struct CONFIG_T {
         uint8_t Rotation;
         uint8_t Contrast;
         uint8_t Language;
-        uint32_t DiagramDuration;
+        struct {
+            uint32_t Duration;
+            uint8_t Mode;
+        } Diagram;
     } Display;
 
     struct {
@@ -164,6 +167,7 @@ public:
 
     INVERTER_CONFIG_T* getFreeInverterSlot();
     INVERTER_CONFIG_T* getInverterConfig(const uint64_t serial);
+    void deleteInverterById(const uint8_t id);
 };
 
 extern ConfigurationClass Configuration;
