@@ -1,4 +1,4 @@
-import type { Device } from "./PinMapping";
+import type { Device } from './PinMapping';
 
 export interface Display {
     rotation: number;
@@ -7,6 +7,7 @@ export interface Display {
     contrast: number;
     language: number;
     diagramduration: number;
+    diagrammode: number;
 }
 
 export interface Led {

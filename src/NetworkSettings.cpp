@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Copyright (C) 2022-2023 Thomas Basler and others
+ * Copyright (C) 2022-2024 Thomas Basler and others
  */
 #include "NetworkSettings.h"
 #include "Configuration.h"
@@ -10,9 +10,11 @@
 #include "defaults.h"
 #include <ESPmDNS.h>
 #include <ETH.h>
+#include "__compiled_constants.h"
 
 NetworkSettingsClass::NetworkSettingsClass()
-    : _apIp(192, 168, 4, 1)
+    : _loopTask(TASK_IMMEDIATE, TASK_FOREVER, std::bind(&NetworkSettingsClass::loop, this))
+    , _apIp(192, 168, 4, 1)
     , _apNetmask(255, 255, 255, 0)
 {
     _dnsServer.reset(new DNSServer());
@@ -21,20 +23,21 @@ NetworkSettingsClass::NetworkSettingsClass()
 void NetworkSettingsClass::init(Scheduler& scheduler)
 {
     using std::placeholders::_1;
+    using std::placeholders::_2;
 
     WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
     WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 
-    WiFi.onEvent(std::bind(&NetworkSettingsClass::NetworkEvent, this, _1));
+    WiFi.disconnect(true, true);
+
+    WiFi.onEvent(std::bind(&NetworkSettingsClass::NetworkEvent, this, _1, _2));
     setupMode();
 
     scheduler.addTask(_loopTask);
-    _loopTask.setCallback(std::bind(&NetworkSettingsClass::loop, this));
-    _loopTask.setIterations(TASK_FOREVER);
     _loopTask.enable();
 }
 
-void NetworkSettingsClass::NetworkEvent(const WiFiEvent_t event)
+void NetworkSettingsClass::NetworkEvent(const WiFiEvent_t event, WiFiEventInfo_t info)
 {
     switch (event) {
     case ARDUINO_EVENT_ETH_START:
@@ -74,10 +77,12 @@ void NetworkSettingsClass::NetworkEvent(const WiFiEvent_t event)
         }
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
-        MessageOutput.println("WiFi disconnected");
+        // Reason codes can be found here: https://github.com/espressif/esp-idf/blob/5454d37d496a8c58542eb450467471404c606501/components/esp_wifi/include/esp_wifi_types_generic.h#L79-L141
+        MessageOutput.printf("WiFi disconnected: %d\r\n", info.wifi_sta_disconnected.reason);
         if (_networkMode == network_mode::WiFi) {
             MessageOutput.println("Try reconnecting");
-            WiFi.reconnect();
+            WiFi.disconnect(true, false);
+            WiFi.begin();
             raiseEvent(network_event::NETWORK_DISCONNECTED);
         }
         break;
@@ -137,7 +142,7 @@ void NetworkSettingsClass::handleMDNS()
 
         MDNS.addService("http", "tcp", 80);
         MDNS.addService("opendtu", "tcp", 80);
-        MDNS.addServiceTxt("opendtu", "tcp", "git_hash", AUTO_GIT_HASH);
+        MDNS.addServiceTxt("opendtu", "tcp", "git_hash", __COMPILED_GIT_HASH__);
 
         MessageOutput.println("done");
     } else {
@@ -268,7 +273,8 @@ void NetworkSettingsClass::applyConfig()
         MessageOutput.print("new credentials... ");
         WiFi.begin(
             Configuration.get().WiFi.Ssid,
-            Configuration.get().WiFi.Password);
+            Configuration.get().WiFi.Password,
+            WIFI_ALL_CHANNEL_SCAN);
     } else {
         MessageOutput.print("existing credentials... ");
         WiFi.begin();
